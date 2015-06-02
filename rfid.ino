@@ -59,7 +59,7 @@ void setup()
 }
 
 int counter = 0;
-int tOld, tNew, elapsed;
+unsigned long tOld, tNew, elapsed;
 void loop() 
 {
   closed = !digitalRead(doorPin);
