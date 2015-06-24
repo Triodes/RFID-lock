@@ -33,42 +33,48 @@
 #include <EEPROM.h>
 
 Servo ser;
-int servoPin = 3;
-int doorPin = 5;
-int buttonPin = 8;
-int buzzerPin = 6;
+#define SERVO_PIN 4
+#define DOOR_PIN 6
+#define BUTTON_PIN 5
+#define BUZZER_PIN 3
+#define LED_PIN 7
 
-int lockDelay = 5000;
+#define LOCK_DELAY 5000
 
-#define SS_PIN 10
+#define SS_PIN 8
 #define RST_PIN 9
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
 bool setLock = true, isLocked = false, closed = true;
 
-unsigned long cardID = 0;
-
 void setup() 
 {
-  pinMode(buttonPin,INPUT_PULLUP);
-  pinMode(doorPin,INPUT_PULLUP);
-  pinMode(buzzerPin,OUTPUT);
+  pinMode(BUTTON_PIN, INPUT_PULLUP);
+  pinMode(DOOR_PIN, INPUT_PULLUP);
+  pinMode(BUZZER_PIN, OUTPUT);
+  pinMode(LED_PIN, INPUT_PULLUP);
+  Serial.begin(9600);
   SPI.begin();
   mfrc522.PCD_Init();
-  mfrc522.PCD_SetAntennaGain(mfrc522.RxGain_max);
 }
 
 int counter = 0;
 unsigned long tOld, tNew, elapsed;
 void loop() 
 {
-  closed = !digitalRead(doorPin);
+
+  tOld = tNew;
+  tNew = millis();
+  elapsed = tNew - tOld;
+
+  closed = !digitalRead(DOOR_PIN);
 
   bool pressed = bPressed();
   
   if (isLocked)
   {
-    bool goodCard = getID() && findID(cardID) != -1;
+    unsigned long cardID = getID();
+    bool goodCard = cardID != 0 && findID(cardID) != -1;
     if (pressed || goodCard)
     {
       setLock = false;
@@ -81,14 +87,10 @@ void loop()
     printEEPROM();
   }
   
-  tOld = tNew;
-  tNew = millis();
-  elapsed = tNew - tOld;
-  
   if (!setLock)
     counter += elapsed;
     
-  if (counter >= lockDelay)
+  if (counter >= LOCK_DELAY)
   {
     setLock = true;
     counter = 0;
@@ -99,48 +101,55 @@ void loop()
   if (setLock && !isLocked && closed)
     lock();
     
-  if (!closed) digitalWrite(buzzerPin, LOW);
+  if (!closed) digitalWrite(BUZZER_PIN, LOW);
 }
 
 void addRemoveCard()
 {
   for (int i = 0; i < 20; i++)
   {
-    digitalWrite(buzzerPin,HIGH);
+    digitalWrite(BUZZER_PIN,HIGH);
     delay(10);
-    digitalWrite(buzzerPin,LOW);
+    digitalWrite(BUZZER_PIN,LOW);
     delay(240);
-    if (getID())
+
+    if (getID() != 0)
     {
-      int number;
-      if ((number = findID(cardID)) == -1)
+      int index;
+
+      if ((index = findID(cardID)) == -1)
       {
+
         int count = EEPROM.read(0);
         writeID(cardID, count);
         EEPROM.write(0, count + 1);
+
         for (int j = 0; j < 4; j++) 
         {
           delay(10);
-          digitalWrite(buzzerPin, HIGH);
+          digitalWrite(BUZZER_PIN, HIGH);
           delay(10);
-          digitalWrite(buzzerPin, LOW);
+          digitalWrite(BUZZER_PIN, LOW);
           delay(100);
         }
+
         return;
       }
       else
       {
         int count = EEPROM.read(0);
         unsigned long toMove = readID(count - 1);
-        writeID(toMove, number);
+        writeID(toMove, index);
         EEPROM.write(0, count - 1);
+
         for (int j = 0; j < 2; j++) 
         {
-          digitalWrite(buzzerPin, HIGH);
+          digitalWrite(BUZZER_PIN, HIGH);
           delay(400);
-          digitalWrite(buzzerPin, LOW);
+          digitalWrite(BUZZER_PIN, LOW);
           delay(200);
         }
+
         return;
       }
     }
@@ -184,24 +193,24 @@ unsigned long readID( int number )
   return result;
 }
 
-bool getID() 
+unsigned long getID() 
 {
   if ( ! mfrc522.PICC_IsNewCardPresent()) 
   {
-    return false;
+    return 0;
   }
   if ( ! mfrc522.PICC_ReadCardSerial()) 
   {
-    return false;
+    return 0;
   }
-  cardID = 0;
+  unsigned long cardID = 0;
   for (int i = 0; i < 4; i++) 
   {
     cardID = cardID << 8;
     cardID += mfrc522.uid.uidByte[i];
   }
   mfrc522.PICC_HaltA();
-  return true;
+  return 0;
 }
 
 void printID(unsigned long id)
@@ -224,7 +233,7 @@ int bsNew, bsOld;
 bool bPressed()
 {
   bsOld = bsNew;
-  bsNew = digitalRead(buttonPin);
+  bsNew = digitalRead(BUTTON_PIN);
   if (bsNew == 0 && bsOld == 1)
   {
     return true;
@@ -234,19 +243,19 @@ bool bPressed()
 
 void unlock()
 {
-  ser.attach(servoPin);
+  ser.attach(SERVO_PIN);
   delay(10);
   ser.write(180);
-  delay(600);
+  delay(1000);
   ser.detach();
-  digitalWrite(buzzerPin,HIGH);
+  digitalWrite(BUZZER_PIN, HIGH);
   isLocked = false;
 }
 
 void lock()
 {
-  digitalWrite(buzzerPin,LOW);
-  ser.attach(servoPin);
+  digitalWrite(BUZZER_PIN, LOW);
+  ser.attach(SERVO_PIN);
   delay(10);
   ser.write(0);
   delay(1000);
