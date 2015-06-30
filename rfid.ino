@@ -39,30 +39,34 @@ Servo ser;
 #define BUZZER_PIN 3
 #define LED_PIN 7
 
-#define LOCK_DELAY 5000
+#define LOCK_DELAY 7000
 
 #define SS_PIN 8
 #define RST_PIN 9
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-bool setLock = true, isLocked = false, closed = true;
+bool setLock = true, isLocked = false, closed = false;
 
 void setup() 
 {
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(DOOR_PIN, INPUT_PULLUP);
   pinMode(BUZZER_PIN, OUTPUT);
-  pinMode(LED_PIN, INPUT_PULLUP);
-  Serial.begin(9600);
+  pinMode(LED_PIN, OUTPUT);
+  //Serial.begin(9600);
   SPI.begin();
   mfrc522.PCD_Init();
+  digitalWrite(LED_PIN, HIGH);
+  delay(500);
+  digitalWrite(LED_PIN, LOW);
 }
 
 int counter = 0;
 unsigned long tOld, tNew, elapsed;
 void loop() 
 {
-
+  //getID();
+  //return;
   tOld = tNew;
   tNew = millis();
   elapsed = tNew - tOld;
@@ -106,14 +110,15 @@ void loop()
 
 void addRemoveCard()
 {
-  for (int i = 0; i < 20; i++)
+  for (int i = 0; i < 30; i++)
   {
     digitalWrite(BUZZER_PIN,HIGH);
     delay(10);
     digitalWrite(BUZZER_PIN,LOW);
     delay(240);
 
-    if (getID() != 0)
+    unsigned long cardID;
+    if ((cardID = getID()) != 0)
     {
       int index;
 
@@ -197,10 +202,12 @@ unsigned long getID()
 {
   if ( ! mfrc522.PICC_IsNewCardPresent()) 
   {
+    //Serial.println("no card present");
     return 0;
   }
   if ( ! mfrc522.PICC_ReadCardSerial()) 
   {
+    //Serial.println("read failed");
     return 0;
   }
   unsigned long cardID = 0;
@@ -210,13 +217,17 @@ unsigned long getID()
     cardID += mfrc522.uid.uidByte[i];
   }
   mfrc522.PICC_HaltA();
-  return 0;
+  //Serial.println("read succes");
+  digitalWrite(LED_PIN, HIGH);
+  delay(10);
+  digitalWrite(LED_PIN, LOW);
+  return cardID;
 }
 
 void printID(unsigned long id)
 {
-  Serial.print(id,HEX);
-  Serial.println("");
+  //Serial.print(id,HEX);
+  //Serial.println("");
 }
 
 void printEEPROM()
@@ -245,7 +256,7 @@ void unlock()
 {
   ser.attach(SERVO_PIN);
   delay(10);
-  ser.write(180);
+  ser.write(175);
   delay(1000);
   ser.detach();
   digitalWrite(BUZZER_PIN, HIGH);
@@ -257,7 +268,7 @@ void lock()
   digitalWrite(BUZZER_PIN, LOW);
   ser.attach(SERVO_PIN);
   delay(10);
-  ser.write(0);
+  ser.write(30);
   delay(1000);
   ser.detach();
   isLocked = true;
