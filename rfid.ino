@@ -39,7 +39,7 @@ Servo ser;
 #define BUZZER_PIN 3
 #define LED_PIN 7
 
-#define LOCK_DELAY 7000
+#define LOCK_DELAY 2000
 
 #define SS_PIN 8
 #define RST_PIN 9
@@ -66,9 +66,9 @@ void beep(int pin, int nTimes)
   for (int i = 0; i < nTimes; i++)
   {
     digitalWrite(pin, HIGH);
-    delay(10);
+    delay(20);
     digitalWrite(pin, LOW);
-    delay(10);
+    delay(20);
   }
 }
 
@@ -76,8 +76,6 @@ int counter = 0;
 unsigned long tOld, tNew, elapsed;
 void loop() 
 {
-//  getID();
-//  return;
   tOld = tNew;
   tNew = millis();
   elapsed = tNew - tOld;
@@ -90,8 +88,9 @@ void loop()
   {
     unsigned long cardID = getID();
     bool goodCard = cardID != 0 && findID(cardID) != -1;
-    if (pressed || goodCard)
+    if (goodCard || pressed)
     {
+      //beep(BUZZER_PIN,4);
       setLock = false;
     }
   }
@@ -211,13 +210,12 @@ unsigned long readID( int number )
 
 unsigned long getID() 
 {
-  beep(LED_PIN,1);
   if ( ! mfrc522.PICC_IsNewCardPresent()) 
   {
     //Serial.println("no card present");
     return 0;
   }
-  beep(BUZZER_PIN,1);
+  //beep(BUZZER_PIN,1);
   if ( ! mfrc522.PICC_ReadCardSerial()) 
   {
     //Serial.println("read failed");
@@ -230,7 +228,7 @@ unsigned long getID()
     cardID += mfrc522.uid.uidByte[i];
   }
   mfrc522.PICC_HaltA();
-  beep(BUZZER_PIN,1);
+  //beep(BUZZER_PIN,1);
   return cardID;
 }
 
@@ -264,11 +262,12 @@ bool bPressed()
 
 void unlock()
 {
-  ser.attach(SERVO_PIN);
-  delay(10);
-  ser.write(175);
-  delay(1000);
-  ser.detach();
+//  ser.attach(SERVO_PIN);
+//  delay(10);
+//  ser.write(175);
+//  delay(1000);
+//  ser.detach();
+  digitalWrite(LED_PIN,HIGH);
   digitalWrite(BUZZER_PIN, HIGH);
   isLocked = false;
 }
@@ -276,10 +275,11 @@ void unlock()
 void lock()
 {
   digitalWrite(BUZZER_PIN, LOW);
-  ser.attach(SERVO_PIN);
-  delay(10);
-  ser.write(30);
-  delay(1000);
-  ser.detach();
+  digitalWrite(LED_PIN,LOW);
+//  ser.attach(SERVO_PIN);
+//  delay(10);
+//  ser.write(30);
+//  delay(1000);
+//  ser.detach();
   isLocked = true;
 }
