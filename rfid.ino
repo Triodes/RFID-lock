@@ -61,12 +61,23 @@ void setup()
   digitalWrite(LED_PIN, LOW);
 }
 
+void beep(int pin, int nTimes)
+{
+  for (int i = 0; i < nTimes; i++)
+  {
+    digitalWrite(pin, HIGH);
+    delay(10);
+    digitalWrite(pin, LOW);
+    delay(10);
+  }
+}
+
 int counter = 0;
 unsigned long tOld, tNew, elapsed;
 void loop() 
 {
-  //getID();
-  //return;
+//  getID();
+//  return;
   tOld = tNew;
   tNew = millis();
   elapsed = tNew - tOld;
@@ -200,11 +211,13 @@ unsigned long readID( int number )
 
 unsigned long getID() 
 {
+  beep(LED_PIN,1);
   if ( ! mfrc522.PICC_IsNewCardPresent()) 
   {
     //Serial.println("no card present");
     return 0;
   }
+  beep(BUZZER_PIN,1);
   if ( ! mfrc522.PICC_ReadCardSerial()) 
   {
     //Serial.println("read failed");
@@ -217,10 +230,7 @@ unsigned long getID()
     cardID += mfrc522.uid.uidByte[i];
   }
   mfrc522.PICC_HaltA();
-  //Serial.println("read succes");
-  digitalWrite(LED_PIN, HIGH);
-  delay(10);
-  digitalWrite(LED_PIN, LOW);
+  beep(BUZZER_PIN,1);
   return cardID;
 }
 
