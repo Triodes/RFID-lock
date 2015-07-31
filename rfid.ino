@@ -27,94 +27,128 @@
  * The reader can be found on eBay for around 5 dollars. Search for "mf-rc522" on ebay.com. 
  */
 
-#include <Servo.h>
+// Import libraries.
 #include <SPI.h>
 #include <MFRC522.h>
 #include <EEPROM.h>
 
-Servo ser;
+// Define pin constants.
 #define SERVO_PIN 4
 #define DOOR_PIN 6
 #define BUTTON_PIN 5
 #define BUZZER_PIN 3
 #define LED_PIN 7
 
-#define LOCK_DELAY 2000
+// Define delays for locking.
+#define LOCK_DELAY 7000
+#define CLOSE_DELAY 2000
 
+// Define SPI Slave Select and Reset pins.
 #define SS_PIN 8
 #define RST_PIN 9
+
+// Define card reader library instance.
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
-bool setLock = true, isLocked = false, closed = false;
+/**
+ *  Define state booleans.
+ *    setLock:  flag to engage the lock next iteration.
+ *    isLocked: flags if the lock is engaged.
+ *    closed:   flags if the door is closed.
+ */
+bool setLock = true, isLocked = false;
 
 void setup() 
 {
+  // Set pin modes for GPIO pins.
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(DOOR_PIN, INPUT_PULLUP);
   pinMode(BUZZER_PIN, OUTPUT);
   pinMode(LED_PIN, OUTPUT);
-  //Serial.begin(9600);
+  pinMode(SERVO_PIN, OUTPUT);
+
+  delay(10);
+
+  // Start the SPI bus.
   SPI.begin();
+  delay(10);
+
+  // Initialize the card reader.
   mfrc522.PCD_Init();
+  delay(10);
+
+  // Flash LED to show that setup is done.
   digitalWrite(LED_PIN, HIGH);
   delay(500);
   digitalWrite(LED_PIN, LOW);
 }
 
-void beep(int pin, int nTimes)
-{
-  for (int i = 0; i < nTimes; i++)
-  {
-    digitalWrite(pin, HIGH);
-    delay(20);
-    digitalWrite(pin, LOW);
-    delay(20);
-  }
-}
-
-int counter = 0;
+// Time measurment variables.
 unsigned long tOld, tNew, elapsed;
+
+// Counter for keeping lock open for the amount specified by LOCK_DELAY.
+int lockCounter = 0;
+
 void loop() 
 {
+  // Measure elapsed time since last loop.
   tOld = tNew;
   tNew = millis();
   elapsed = tNew - tOld;
 
-  closed = !digitalRead(DOOR_PIN);
+  // Set bool if door is closed.
+  bool closed = dClosed();
 
-  bool pressed = bPressed();
+  // Set bool if button is pressed.
+  bool pressed = buttonPressed();
   
   if (isLocked)
   {
+    // Try to read a card.
     unsigned long cardID = getID();
+
+    // Check if the card is a valid card.
     bool goodCard = cardID != 0 && findID(cardID) != -1;
+
+    // If the card id good or the button was pressed: unlock.
     if (goodCard || pressed)
     {
-      //beep(BUZZER_PIN,4);
+      digitalWrite(LED_PIN, HIGH);
+      delay(200);
+      digitalWrite(LED_PIN, LOW);
       setLock = false;
     }
   }
   
+  // If the button is pressed while the door is open: go into add/remove mode.
   if (pressed && !closed)
   {
     addRemoveCard();
-    printEEPROM();
+    //printEEPROM();
   }
   
+  // If the lock flag is unset, start counting
   if (!setLock)
-    counter += elapsed;
-    
-  if (counter >= LOCK_DELAY)
+  {
+    lockCounter += elapsed;
+  }
+  
+  // If the LOCK_DELAY has expired: set the lock flag.
+  if (lockCounter >= LOCK_DELAY)
   {
     setLock = true;
-    counter = 0;
+    lockCounter = 0;
   }
   
+  // If the lock flag is unset and the door is unlocked: unlock the door.
   if (!setLock && isLocked)
     unlock();
+
+  // If the lock flag is set the door is unlocked and the door is closed: lock the door.
   if (setLock && !isLocked && closed)
     lock();
-    
+  
+  // If the door is open: disable the buzzer.
   if (!closed) digitalWrite(BUZZER_PIN, LOW);
 }
 
@@ -183,22 +217,24 @@ int findID(unsigned long cardID)
   return -1;
 }
 
-bool writeID(unsigned long cardID, int number)
+// Write a card id to the specified position in the EEPROM memory.
+bool writeID(unsigned long cardID, int position)
 {
-  int start = (number) * 4 + 1;
+  int start = (position) * 4 + 1;
   unsigned long mask = 0xFF000000;
-  for ( int j = 0; j < 4; j++ ) 
+  for (int j = 0; j < 4; j++) 
   { 
     byte toWrite = (cardID & mask) >> 24;
-    EEPROM.write( start+j, toWrite);
+    EEPROM.write(start+j, toWrite);
     cardID = cardID << 8;
   }
   return true;
 }
 
-unsigned long readID( int number ) 
+// Read the card id at the specified position.
+unsigned long readID(int position) 
 {
-  int start = (number * 4 ) + 1;
+  int start = (position * 4 ) + 1;
   unsigned long result = 0;
   for ( int i = 0; i < 4; i++ ) 
   {
@@ -208,48 +244,55 @@ unsigned long readID( int number )
   return result;
 }
 
+// Try to read a card id from the card reader.
 unsigned long getID() 
 {
+  // Check if a new card is present.
   if ( ! mfrc522.PICC_IsNewCardPresent()) 
   {
-    //Serial.println("no card present");
     return 0;
   }
-  //beep(BUZZER_PIN,1);
+
+  // Try to read the card and check if the read was successful.
   if ( ! mfrc522.PICC_ReadCardSerial()) 
   {
-    //Serial.println("read failed");
     return 0;
   }
+
+  // Copy the cardID into an unsigned long.
   unsigned long cardID = 0;
   for (int i = 0; i < 4; i++) 
   {
     cardID = cardID << 8;
     cardID += mfrc522.uid.uidByte[i];
   }
+
+  // Halt the card reader.
   mfrc522.PICC_HaltA();
-  //beep(BUZZER_PIN,1);
+
+  // Return the card ID.
   return cardID;
 }
 
-void printID(unsigned long id)
-{
-  //Serial.print(id,HEX);
-  //Serial.println("");
-}
+// void printID(unsigned long id)
+// {
+//   Serial.print(id,HEX);
+//   Serial.println("");
+// }
 
-void printEEPROM()
-{
-  int count = EEPROM.read(0);
-  for (int i = 0; i < count; i++)
-  {
-    unsigned long fromMem = readID(i);
-    printID(fromMem);
-  }
-}
+// void printEEPROM()
+// {
+//   int count = EEPROM.read(0);
+//   for (int i = 0; i < count; i++)
+//   {
+//     unsigned long fromMem = readID(i);
+//     printID(fromMem);
+//   }
+// }
 
+// Reports the state of the button.
 int bsNew, bsOld;
-bool bPressed()
+bool buttonPressed()
 {
   bsOld = bsNew;
   bsNew = digitalRead(BUTTON_PIN);
@@ -260,26 +303,54 @@ bool bPressed()
   return false;
 }
 
+// Reports if the door is closed and implements the delay after closing.
+int doorCounter = 0;
+bool dClosed()
+{
+  doorCounter += elapsed;
+  if (!digitalRead(DOOR_PIN))
+  {
+    if (doorCounter >= CLOSE_DELAY)
+    {
+      doorCounter = CLOSE_DELAY;
+      return true;
+    }
+  }
+  else
+  {
+    doorCounter = 0;
+  }
+  return false;
+}
+
+// Unlocks the door.
 void unlock()
 {
-//  ser.attach(SERVO_PIN);
-//  delay(10);
-//  ser.write(175);
-//  delay(1000);
-//  ser.detach();
-  digitalWrite(LED_PIN,HIGH);
+  TurnServo(175);
+
   digitalWrite(BUZZER_PIN, HIGH);
   isLocked = false;
 }
 
+// Locks the door.
 void lock()
 {
   digitalWrite(BUZZER_PIN, LOW);
-  digitalWrite(LED_PIN,LOW);
-//  ser.attach(SERVO_PIN);
-//  delay(10);
-//  ser.write(30);
-//  delay(1000);
-//  ser.detach();
+
+  TurnServo(30);
+
   isLocked = true;
+}
+
+// Turns the servo to the specified position.
+void TurnServo(int angle)
+{
+  int ms = map(angle, 0, 180, 544, 2400);
+  for(int i=0; i<100; i++)
+  {
+    digitalWrite(SERVO_PIN, HIGH);
+    delayMicroseconds(ms);
+    digitalWrite(SERVO_PIN, LOW);
+    delayMicroseconds(20000-ms);
+  }
 }
