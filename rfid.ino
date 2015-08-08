@@ -32,6 +32,8 @@
 #include <MFRC522.h>
 #include <EEPROM.h>
 
+#define MASTER_KEY 0x05ACA8B3
+
 // Define pin constants.
 #define SERVO_PIN 4
 #define DOOR_PIN 6
@@ -97,19 +99,13 @@ void loop()
   elapsed = tNew - tOld;
 
   // Set bool if door is closed.
-  bool closed = dClosed();
-
-  // Set bool if button is pressed.
-  bool pressed = buttonPressed();
+  bool closed = doorClosed();
   
   if (isLocked)
   {
     // If the card id is good or the button was pressed: unlock.
-    if (goodID(getID()) || pressed)
+    if (goodID(getID()) || buttonPressed())
     {
-      digitalWrite(LED_PIN, HIGH);
-      delay(200);
-      digitalWrite(LED_PIN, LOW);
       setLock = false;
       unlock();
     }
@@ -121,8 +117,8 @@ void loop()
   	digitalWrite(BUZZER_PIN, LOW);
 
 		// If a good card is found. go into add/remove mode.
-  	if (goodID(getID()))
-  		addRemoveCard();
+  	if (getID() == MASTER_KEY)
+  		editCardDB();
   }
   
   // If the lock flag is unset, start counting
@@ -143,57 +139,64 @@ void loop()
     lock();
 }
 
-void addRemoveCard()
+void editCardDB()
 {
   for (int i = 0; i < 30; i++)
   {
-    digitalWrite(BUZZER_PIN,HIGH);
-    delay(10);
-    digitalWrite(BUZZER_PIN,LOW);
-    delay(240);
+    Beep(10,240,1);
 
-    unsigned long cardID;
-    if ((cardID = getID()) != 0)
+    if (addRemoveCard())
+      return;
+
+    if (buttonPressed())
     {
-      int index;
-
-      if ((index = findID(cardID)) == -1)
+      for(int i=0; i<60; i++)
       {
-
-        int count = EEPROM.read(0);
-        writeID(cardID, count);
-        EEPROM.write(0, count + 1);
-
-        for (int j = 0; j < 4; j++) 
+        Beep(10,115,1);
+        if (getID() == MASTER_KEY)
         {
-          delay(10);
-          digitalWrite(BUZZER_PIN, HIGH);
-          delay(10);
-          digitalWrite(BUZZER_PIN, LOW);
-          delay(100);
+          clearCards();
+          Beep(1500,0,1);
+          return;
         }
-
-        return;
-      }
-      else
-      {
-        int count = EEPROM.read(0);
-        unsigned long toMove = readID(count - 1);
-        writeID(toMove, index);
-        EEPROM.write(0, count - 1);
-
-        for (int j = 0; j < 2; j++) 
-        {
-          digitalWrite(BUZZER_PIN, HIGH);
-          delay(400);
-          digitalWrite(BUZZER_PIN, LOW);
-          delay(200);
-        }
-
-        return;
       }
     }
   }
+}
+
+bool addRemoveCard()
+{
+  unsigned long cardID;
+  if ((cardID = getID()) != 0)
+  {
+    int index;
+
+    if ((index = findID(cardID)) == -1)
+    {
+
+      int count = EEPROM.read(0);
+      writeID(cardID, count);
+      EEPROM.write(0, count + 1);
+
+      delay(10);
+
+      Beep(10,100,4);
+
+      return true;
+    }
+    else
+    {
+      int count = EEPROM.read(0);
+      unsigned long toMove = readID(count - 1);
+      writeID(toMove, index);
+      EEPROM.write(0, count - 1);
+
+      Beep(400,200,2);
+
+      return true;
+    }
+  }
+  return false;
 }
 
 int findID(unsigned long cardID)
@@ -201,8 +204,7 @@ int findID(unsigned long cardID)
   int count = EEPROM.read(0);
   for (int i = 0; i < count; i++)
   {
-    unsigned long fromMem = readID(i);
-    if (cardID == fromMem)
+    if (cardID == readID(i))
       return i;
   }
   return -1;
@@ -216,7 +218,7 @@ bool goodID(unsigned long cardID)
 // Write a card id to the specified position in the EEPROM memory.
 bool writeID(unsigned long cardID, int position)
 {
-  int start = (position) * 4 + 1;
+  int start = position * 4 + 1;
   unsigned long mask = 0xFF000000;
   for (int j = 0; j < 4; j++) 
   { 
@@ -230,7 +232,7 @@ bool writeID(unsigned long cardID, int position)
 // Read the card id at the specified position.
 unsigned long readID(int position) 
 {
-  int start = (position * 4 ) + 1;
+  int start = position * 4  + 1;
   unsigned long result = 0;
   for ( int i = 0; i < 4; i++ ) 
   {
@@ -238,6 +240,15 @@ unsigned long readID(int position)
     result += EEPROM.read(start+i);
   }
   return result;
+}
+
+void clearCards()
+{
+  for (int i = 0; i < count; i++)
+  {
+    writeID(0,i);
+  }
+  EEPROM.write(0,0);
 }
 
 // Try to read a card id from the card reader.
@@ -265,6 +276,10 @@ unsigned long getID()
 
   // Halt the card reader.
   mfrc522.PICC_HaltA();
+
+  digitalWrite(LED_PIN, HIGH);
+  delay(200);
+  digitalWrite(LED_PIN, LOW);
 
   // Return the card ID.
   return cardID;
@@ -301,12 +316,22 @@ bool buttonPressed()
 
 // Reports if the door is closed and implements the delay after closing.
 int doorCounter = 0;
-bool cDoorState, pDoorState;
-bool dClosed()
+bool cDoorState = true, pDoorState = true;
+bool doorClosed()
 {
+  // TRUE  == Open
+  // FALSE == Closed
+  pDoorState = cDoorState;
+  cDoorState = digitalRead(DOOR_PIN);
+
   doorCounter += elapsed;
-  if (!digitalRead(DOOR_PIN))
+  if (!cDoorState)
   {
+    if (pDoorState)
+    {
+      Beep(200,100,2);
+    }
+
     if (doorCounter >= CLOSE_DELAY)
     {
       doorCounter = CLOSE_DELAY;
@@ -349,5 +374,15 @@ void TurnServo(int angle)
     delayMicroseconds(ms);
     digitalWrite(SERVO_PIN, LOW);
     delayMicroseconds(20000-ms);
+  }
+}
+
+void Beep(int timeOn, int timeOff, int amount)
+{
+  for(int i=0; i<amount; i++){
+    digitalWrite(BUZZER_PIN, HIGH);
+    delay(timeOn);
+    digitalWrite(BUZZER_PIN, LOW);
+    delay(timeOff);
   }
 }
