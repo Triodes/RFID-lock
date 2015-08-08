@@ -104,27 +104,25 @@ void loop()
   
   if (isLocked)
   {
-    // Try to read a card.
-    unsigned long cardID = getID();
-
-    // Check if the card is a valid card.
-    bool goodCard = cardID != 0 && findID(cardID) != -1;
-
-    // If the card id good or the button was pressed: unlock.
-    if (goodCard || pressed)
+    // If the card id is good or the button was pressed: unlock.
+    if (goodID(getID()) || pressed)
     {
       digitalWrite(LED_PIN, HIGH);
       delay(200);
       digitalWrite(LED_PIN, LOW);
       setLock = false;
+      unlock();
     }
   }
-  
-  // If the button is pressed while the door is open: go into add/remove mode.
-  if (pressed && !closed)
+
+  if (!closed)
   {
-    addRemoveCard();
-    //printEEPROM();
+  	// If the door is open: disable the buzzer.
+  	digitalWrite(BUZZER_PIN, LOW);
+
+		// If a good card is found. go into add/remove mode.
+  	if (goodID(getID()))
+  		addRemoveCard();
   }
   
   // If the lock flag is unset, start counting
@@ -139,17 +137,10 @@ void loop()
     setLock = true;
     lockCounter = 0;
   }
-  
-  // If the lock flag is unset and the door is unlocked: unlock the door.
-  if (!setLock && isLocked)
-    unlock();
 
   // If the lock flag is set the door is unlocked and the door is closed: lock the door.
   if (setLock && !isLocked && closed)
     lock();
-  
-  // If the door is open: disable the buzzer.
-  if (!closed) digitalWrite(BUZZER_PIN, LOW);
 }
 
 void addRemoveCard()
@@ -215,6 +206,11 @@ int findID(unsigned long cardID)
       return i;
   }
   return -1;
+}
+
+bool goodID(unsigned long cardID)
+{
+	return cardID != 0 && findID(cardID) != -1;
 }
 
 // Write a card id to the specified position in the EEPROM memory.
@@ -305,6 +301,7 @@ bool buttonPressed()
 
 // Reports if the door is closed and implements the delay after closing.
 int doorCounter = 0;
+bool cDoorState, pDoorState;
 bool dClosed()
 {
   doorCounter += elapsed;
@@ -346,7 +343,7 @@ void lock()
 void TurnServo(int angle)
 {
   int ms = map(angle, 0, 180, 544, 2400);
-  for(int i=0; i<100; i++)
+  for(int i=0; i<200; i++)
   {
     digitalWrite(SERVO_PIN, HIGH);
     delayMicroseconds(ms);
