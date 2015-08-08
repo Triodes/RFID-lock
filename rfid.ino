@@ -139,6 +139,7 @@ void loop()
     lock();
 }
 
+// Function that enables mode to add, remove or clear the cards stored in the db.
 void editCardDB()
 {
   for (int i = 0; i < 30; i++)
@@ -164,6 +165,7 @@ void editCardDB()
   }
 }
 
+// Tries to add or remove a card. returns true if successful.
 bool addRemoveCard()
 {
   unsigned long cardID;
