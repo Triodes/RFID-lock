@@ -31,8 +31,9 @@
 #include <SPI.h>
 #include <MFRC522.h>
 #include <EEPROM.h>
+#include <Servo.h>
 
-#define MASTER_KEY 0x05ACA8B3
+#define MASTER_KEY 0xA331EE00
 
 // Define pin constants.
 #define SERVO_PIN 4
@@ -52,6 +53,8 @@
 // Define card reader library instance.
 MFRC522 mfrc522(SS_PIN, RST_PIN);
 
+Servo s;
+
 /**
  *  Define state booleans.
  *    setLock:  flag to engage the lock next iteration.
@@ -69,15 +72,13 @@ void setup()
   pinMode(LED_PIN, OUTPUT);
   pinMode(SERVO_PIN, OUTPUT);
 
-  delay(10);
+  //Serial.begin(9600);
 
   // Start the SPI bus.
   SPI.begin();
-  delay(10);
 
   // Initialize the card reader.
   mfrc522.PCD_Init();
-  delay(10);
 
   // Flash LED to show that setup is done.
   digitalWrite(LED_PIN, HIGH);
@@ -110,7 +111,7 @@ void loop()
       unlock();
     }
   }
-
+  
   if (!closed)
   {
   	// If the door is open: disable the buzzer.
@@ -147,11 +148,14 @@ void editCardDB()
     Beep(10,240,1);
 
     if (addRemoveCard())
+    {
+      //printEEPROM();
       return;
+    }
 
     if (buttonPressed())
     {
-      for(int i=0; i<60; i++)
+      for(int i=0; i<30; i++)
       {
         Beep(10,115,1);
         if (getID() == MASTER_KEY)
@@ -161,6 +165,7 @@ void editCardDB()
           return;
         }
       }
+      return;
     }
   }
 }
@@ -179,8 +184,6 @@ bool addRemoveCard()
       int count = EEPROM.read(0);
       writeID(cardID, count);
       EEPROM.write(0, count + 1);
-
-      delay(10);
 
       Beep(10,100,4);
 
@@ -246,6 +249,7 @@ unsigned long readID(int position)
 
 void clearCards()
 {
+  int count = EEPROM.read(0);
   for (int i = 0; i < count; i++)
   {
     writeID(0,i);
@@ -283,18 +287,21 @@ unsigned long getID()
   delay(200);
   digitalWrite(LED_PIN, LOW);
 
+  // Serial.print("Card read: 0x");
+  // printID(cardID);
+
   // Return the card ID.
   return cardID;
 }
 
 // void printID(unsigned long id)
 // {
-//   Serial.print(id,HEX);
-//   Serial.println("");
+//   Serial.println(id,HEX);
 // }
 
 // void printEEPROM()
 // {
+//   Serial.println("Dumping EEPROM...");
 //   int count = EEPROM.read(0);
 //   for (int i = 0; i < count; i++)
 //   {
@@ -331,7 +338,7 @@ bool doorClosed()
   {
     if (pDoorState)
     {
-      Beep(200,100,2);
+      Beep(100,100,2);
     }
 
     if (doorCounter >= CLOSE_DELAY)
@@ -350,7 +357,7 @@ bool doorClosed()
 // Unlocks the door.
 void unlock()
 {
-  TurnServo(175);
+  TurnServo(180);
 
   digitalWrite(BUZZER_PIN, HIGH);
   isLocked = false;
@@ -361,7 +368,7 @@ void lock()
 {
   digitalWrite(BUZZER_PIN, LOW);
 
-  TurnServo(30);
+  TurnServo(0);
 
   isLocked = true;
 }
@@ -369,14 +376,18 @@ void lock()
 // Turns the servo to the specified position.
 void TurnServo(int angle)
 {
-  int ms = map(angle, 0, 180, 544, 2400);
-  for(int i=0; i<200; i++)
-  {
-    digitalWrite(SERVO_PIN, HIGH);
-    delayMicroseconds(ms);
-    digitalWrite(SERVO_PIN, LOW);
-    delayMicroseconds(20000-ms);
-  }
+  s.attach(SERVO_PIN,630,2100);
+  s.write(angle);
+  delay(750);
+  s.detach();
+  // int ms = map(angle, 0, 180, 630, 2100);
+  // for(int i=0; i<200; i++)
+  // {
+  //   digitalWrite(SERVO_PIN, HIGH);
+  //   delayMicroseconds(ms);
+  //   digitalWrite(SERVO_PIN, LOW);
+  //   delayMicroseconds(20000-ms);
+  // }
 }
 
 void Beep(int timeOn, int timeOff, int amount)
